@@ -1,0 +1,42 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
+COMMON_COPTS = ["-Wall", "-Wextra", "-Wno-error=maybe-uninitialized", "-std=c++20"]
+
+cc_library(
+    name = "algorithm_compat",
+    hdrs = ["BasicTypes.hpp", "Logger.hpp"],
+    copts = COMMON_COPTS,
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "basic_types_test",
+    srcs = ["BasicTypes_test.cpp"],
+    deps = [":algorithm_compat", "@googletest//:gtest_main"],
+    copts = COMMON_COPTS,
+)
+
+cc_library(
+    name = "algorithm",
+    srcs = glob(["*.cpp"], exclude = ["AlgorithmDemo.cpp", "BasicTypes_test.cpp"]),
+    hdrs = glob(["*.hpp"]),
+    copts = COMMON_COPTS,
+    deps = [
+        ":algorithm_compat",
+        "@eigen",
+        "@nlohmann_json//:json",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_binary(
+    name = "algorithm_demo",
+    srcs = ["AlgorithmDemo.cpp"],
+    deps = [":algorithm"],
+    copts = COMMON_COPTS,
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,40 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
+load("@com_github_grpc_grpc//bazel:cc_grpc_library.bzl", "cc_grpc_library")
+
+# py_proto_library is loaded from grpc's python_rules.bzl (not from
+# @protobuf//bazel:py_proto_library.bzl) because py_grpc_library only
+# accepts deps emitting the provider produced by grpc's bundled
+# py_proto_library. The protobuf-bundled py_proto_library is provider-
+# incompatible and triggers an analysis-time error if used here.
+load("@com_github_grpc_grpc//bazel:python_rules.bzl", "py_grpc_library", "py_proto_library")
+
+package(default_visibility = ["//visibility:public"])
+
+proto_library(
+    name = "radar_reprojector_proto",
+    srcs = ["radar_reprojector.proto"],
+)
+
+cc_proto_library(
+    name = "radar_reprojector_cc_proto",
+    deps = [":radar_reprojector_proto"],
+)
+
+cc_grpc_library(
+    name = "radar_reprojector_cc_grpc",
+    srcs = [":radar_reprojector_proto"],
+    deps = [":radar_reprojector_cc_proto"],
+    grpc_only = True,
+)
+
+py_proto_library(
+    name = "radar_reprojector_py_proto",
+    deps = [":radar_reprojector_proto"],
+)
+
+py_grpc_library(
+    name = "radar_reprojector_py_grpc",
+    srcs = [":radar_reprojector_proto"],
+    deps = [":radar_reprojector_py_proto"],
+)

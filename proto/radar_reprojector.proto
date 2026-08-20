@@ -1,0 +1,182 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package radar_reprojection.proto;
+
+// =====================================================================
+// Basic geometry primitives (mirror Eigen::Vector3f / Eigen::Affine3f).
+// =====================================================================
+
+message Vec3f {
+    float x = 1;
+    float y = 2;
+    float z = 3;
+}
+
+// Hamilton quaternion (x,y,z,w with w the scalar part), matching
+// Eigen::Quaternionf's component ordering.
+message Quaternionf {
+    float x = 1;
+    float y = 2;
+    float z = 3;
+    float w = 4;
+}
+
+// Rigid transform = rotation * translation. Wire-equivalent of
+// Eigen::Affine3f for rigid (non-scaling, non-shearing) poses, which is
+// all the reprojector uses.
+message Pose {
+    Vec3f translation     = 1;
+    Quaternionf rotation  = 2;
+}
+
+// =====================================================================
+// Radar types (mirror algorithm/RadarTypes.hpp).
+// =====================================================================
+
+message RadarIntrinsics {
+    float min_range_m   = 1;
+    float max_range_m   = 2;
+    float half_hfov_rad = 3;
+    float half_vfov_rad = 4;
+    float hfov_res_rad  = 5;
+    float vfov_res_rad  = 6;
+    float range_res_m   = 7;
+}
+
+message RadarParam {
+    string id                  = 1;
+    RadarIntrinsics intrinsics = 2;
+    Pose to_ego                = 3;
+    uint32 max_num_returns     = 4;
+}
+
+message ReferenceIndex {
+    string radar_id       = 1;
+    int32 scan_index      = 2;
+    int32 detection_index = 3;
+    string actor_id       = 4;
+}
+
+message RadarDetection {
+    float azimuth_rad         = 1;
+    float elevation_rad       = 2;
+    float distance_m          = 3;
+    float radial_velocity_mps = 4;
+    float rcs_dbm             = 5;
+    ReferenceIndex reference  = 6;
+    // Used by the ego-pose-deviation flow to preserve tangential velocity.
+    Vec3f vel_in_world        = 7;
+}
+
+message RadarScan {
+    int64 timestamp_us                 = 1; // dwTime_t, microseconds
+    repeated RadarDetection detections = 2;
+}
+
+// =====================================================================
+// Actor types (mirror algorithm/ActorTypes.hpp).
+// =====================================================================
+
+message ActorState {
+    int64 timestamp_us     = 1; // dwTime_t, microseconds
+    Pose to_world          = 2;
+    Pose from_world        = 3;
+    Vec3f velocity_mps     = 4; // in world frame
+    Vec3f bbox_half_size_m = 5; // half (length, width, height)
+    Vec3f bbox_center_m    = 6; // bbox center in actor local frame
+}
+
+message ActorTrajectory {
+    repeated ActorState states = 1;
+}
+
+// =====================================================================
+// Log data (mirror algorithm/LogTypes.hpp).
+// =====================================================================
+
+message LogRecording {
+    RadarParam param         = 1;
+    repeated RadarScan scans = 2;
+}
+
+message LogActorData {
+    ActorTrajectory ego_trajectory                   = 1;
+    map<string, ActorTrajectory> actor_to_trajectory = 2; // key: actor id
+}
+
+message LogData {
+    map<string, LogRecording> log_radar_data = 1; // key: radar id
+    LogActorData log_actor_data              = 2;
+}
+
+// =====================================================================
+// Algorithm parameters (mirror algorithm/ReprojectorTypes.hpp).
+// =====================================================================
+
+message ReprojectorParam {
+    bool use_log_intrinsics  = 1;
+    bool do_down_sampling    = 2;
+    Vec3f bbox_scale_factor  = 3;
+    Vec3f bbox_margin        = 4;
+    uint64 max_search_size   = 5; // 30 default; 1 mimics v1 behavior
+    bool dump                = 6;
+    string dump_folder       = 7;
+}
+
+// =====================================================================
+// Service requests / responses.
+// =====================================================================
+
+message InitializeRequest {
+    ReprojectorParam param = 1;
+    LogData log_data       = 2;
+}
+
+// Empty payload; errors are reported via gRPC Status rather than response fields. The
+// message exists as a named type so future fields can be added in a
+// wire-compatible way.
+message InitializeResponse {
+}
+
+// Mirrors algorithm::ReprojectInput. The C++ side wraps these fields in a
+// ReprojectInput struct; the wire form keeps them flat to avoid a redundant
+// nesting level.
+message ReprojectRequest {
+    int64 timestamp_us                     = 1; // dwTime_t, simulation domain
+    RadarParam radar_param                 = 2;
+    ActorState ego_state                   = 3;
+    map<string, ActorState> actor_to_state = 4; // key: actor id
+}
+
+message ReprojectResponse {
+    RadarScan scan = 1;
+}
+
+// =====================================================================
+// Service definition.
+// =====================================================================
+
+service RadarReprojectorService {
+    // Pre-process the log data so subsequent Reproject calls can run.
+    // Maps to algorithm::RadarReprojector::initialize.
+    rpc Initialize(InitializeRequest) returns (InitializeResponse);
+
+    // Synthesize a radar scan at a new ego/actor pose.
+    // Maps to algorithm::RadarReprojector::reproject.
+    rpc Reproject(ReprojectRequest) returns (ReprojectResponse);
+}

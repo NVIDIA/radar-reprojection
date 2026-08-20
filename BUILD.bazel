@@ -1,0 +1,17 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+COMMON_COPTS = ["-Wall", "-Wextra", "-Wno-error=maybe-uninitialized", "-std=c++20"]
+
+# Public re-exports: callers say //:algorithm and //:algorithm_demo without
+# caring about the algorithm/ subpackage layout.
+cc_library(
+    name = "algorithm",
+    deps = ["//algorithm:algorithm"],
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "algorithm_demo",
+    actual = "//algorithm:algorithm_demo",
+)
+

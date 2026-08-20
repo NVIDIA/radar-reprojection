@@ -1,0 +1,5 @@
+filegroup(
+    name = "radar_intrinsics_json",
+    srcs = ["radar_intrinsics.json"],
+    visibility = ["//visibility:public"],
+)

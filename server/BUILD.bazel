@@ -1,0 +1,59 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
+COMMON_COPTS = ["-Wall", "-Wextra", "-Wno-error=maybe-uninitialized", "-std=c++20"]
+
+cc_library(
+    name = "conversions",
+    srcs = ["Conversions.cpp"],
+    hdrs = ["Conversions.hpp"],
+    copts = COMMON_COPTS,
+    deps = [
+        "//algorithm:algorithm",
+        "//proto:radar_reprojector_cc_proto",
+        "@eigen",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "conversions_test",
+    srcs = ["test/Conversions_test.cpp"],
+    deps = [":conversions", "@googletest//:gtest_main"],
+    copts = COMMON_COPTS,
+)
+
+cc_library(
+    name = "radar_reprojection_server_lib",
+    srcs = ["RadarReprojectionServer.cpp"],
+    hdrs = ["RadarReprojectionServer.hpp"],
+    copts = COMMON_COPTS,
+    deps = [
+        ":conversions",
+        "//algorithm:algorithm",
+        "//proto:radar_reprojector_cc_grpc",
+        "@com_github_grpc_grpc//:grpc++",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "radar_reprojection_server_test",
+    srcs = ["test/RadarReprojectionServer_test.cpp"],
+    deps = [
+        ":radar_reprojection_server_lib",
+        "@com_github_grpc_grpc//:grpc++",
+        "@googletest//:gtest_main",
+    ],
+    copts = COMMON_COPTS,
+)
+
+cc_binary(
+    name = "radar_reprojection_server",
+    srcs = ["MainServer.cpp"],
+    deps = [
+        ":radar_reprojection_server_lib",
+        "@com_github_grpc_grpc//:grpc++",
+    ],
+    copts = COMMON_COPTS,
+    visibility = ["//visibility:public"],
+)

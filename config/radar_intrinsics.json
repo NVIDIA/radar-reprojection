@@ -1,0 +1,6 @@
+{
+  "srr_0":         { "minRangeM": 0.2, "maxRangeM":  50.0, "halfHfovRad": 1.0472, "halfVfovRad": 0.1745, "hfovResRad": 0.0087, "vfovResRad": 0.0175, "rangeResM": 0.15 },
+  "srr_3":         { "minRangeM": 0.2, "maxRangeM":  60.0, "halfHfovRad": 1.0472, "halfVfovRad": 0.1745, "hfovResRad": 0.0087, "vfovResRad": 0.0175, "rangeResM": 0.15 },
+  "mrr_2":         { "minRangeM": 0.5, "maxRangeM": 100.0, "halfHfovRad": 0.5236, "halfVfovRad": 0.0873, "hfovResRad": 0.0044, "vfovResRad": 0.0175, "rangeResM": 0.25 },
+  "imaging_lrr_1": { "minRangeM": 1.0, "maxRangeM": 250.0, "halfHfovRad": 0.5236, "halfVfovRad": 0.1745, "hfovResRad": 0.0017, "vfovResRad": 0.0087, "rangeResM": 0.40 }
+}

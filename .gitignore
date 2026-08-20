@@ -1,0 +1,20 @@
+# Dataset sample — gated under NVIDIA Physical AI AV license, do not commit
+# Ignore everything under sample_data/ except curated infrastructure files.
+sample_data/*
+!sample_data/README.md
+!sample_data/BUILD.bazel
+
+.claude
+.vscode
+CLAUDE.md
+
+# Bazel output symlinks
+bazel-*/
+bazel-bin
+bazel-out
+bazel-testlogs
+bazel-radar_reprojection
+
+# Python bytecode
+__pycache__/
+*.py[cod]

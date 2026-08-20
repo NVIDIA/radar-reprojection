@@ -1,0 +1,84 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("@pip//:requirements.bzl", "requirement")
+
+py_binary(
+    name = "smoke_client",
+    srcs = ["smoke_client.py"],
+    deps = [
+        "//proto:radar_reprojector_py_proto",
+        "//proto:radar_reprojector_py_grpc",
+        requirement("grpcio"),
+    ],
+    main = "smoke_client.py",
+    visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "adapter",
+    srcs = ["adapter.py"],
+    deps = ["//proto:radar_reprojector_py_proto"],
+    visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "reproject_iter",
+    srcs = ["reproject_iter.py"],
+    deps = [
+        "//proto:radar_reprojector_py_proto",
+        requirement("numpy"),
+    ],
+    visibility = ["//visibility:public"],
+)
+
+py_test(
+    name = "reproject_iter_test",
+    srcs = ["test/reproject_iter_test.py"],
+    deps = [
+        ":reproject_iter",
+        "//proto:radar_reprojector_py_proto",
+    ],
+    main = "test/reproject_iter_test.py",
+)
+
+py_library(
+    name = "physical_ai_av_adapter",
+    srcs = ["physical_ai_av_adapter.py"],
+    deps = [
+        ":adapter",
+        ":reproject_iter",
+        "//proto:radar_reprojector_py_proto",
+        requirement("numpy"),
+        requirement("pyarrow"),
+    ],
+    visibility = ["//visibility:public"],
+)
+
+py_test(
+    name = "physical_ai_av_adapter_test",
+    srcs = ["test/physical_ai_av_adapter_test.py"],
+    deps = [
+        ":physical_ai_av_adapter",
+        "//proto:radar_reprojector_py_proto",
+    ],
+    data = [
+        "//sample_data:fixture_clip",
+        "//config:radar_intrinsics_json",
+    ],
+    main = "test/physical_ai_av_adapter_test.py",
+)
+
+py_binary(
+    name = "run_clip",
+    srcs = ["run_clip.py"],
+    deps = [
+        ":physical_ai_av_adapter",
+        ":reproject_iter",
+        "//proto:radar_reprojector_py_proto",
+        "//proto:radar_reprojector_py_grpc",
+        requirement("grpcio"),
+        requirement("numpy"),
+        requirement("matplotlib"),
+    ],
+    main = "run_clip.py",
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: Report a security vulnerability
+    url: https://www.nvidia.com/en-us/security/
+    about: >-
+      Report security issues privately through NVIDIA's Vulnerability
+      Disclosure Program.

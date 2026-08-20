@@ -1,0 +1,7 @@
+common --enable_bzlmod
+build  --cxxopt=-std=c++20 --host_cxxopt=-std=c++20
+build  --incompatible_strict_action_env
+test   --test_output=errors
+
+build:debug   -c dbg --copt=-O0 --copt=-g
+build:release -c opt

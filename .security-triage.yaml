@@ -1,0 +1,20 @@
+version: "1.0"
+project: "radar-reprojection"
+last_updated: "2026-08-19T17:29:39Z"
+
+repository_exposure_classification:
+  visibility: "Public"
+  basis: "Project is being prepared for open-source distribution"
+  confirmed_by: "rrypka"
+  date: "2026-08-19"
+
+service_exposure_classification:
+  tier: "External / Regulated"
+  confidence: "high"
+  basis: "Externally distributed software with a network-listening gRPC server"
+  confirmed_by: "rrypka"
+  date: "2026-08-19"
+
+false_positives: []
+accepted_risks: []
+suppressed_cves: []

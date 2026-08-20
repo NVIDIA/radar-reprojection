@@ -1,0 +1,9 @@
+filegroup(
+    name = "fixture_clip",
+    srcs = glob([
+        "radar/**/*.parquet",
+        "labels/**/*.parquet",
+        "calibration/**/*.parquet",
+    ], allow_empty = True),
+    visibility = ["//visibility:public"],
+)
