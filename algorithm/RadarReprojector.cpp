@@ -60,7 +60,7 @@ bool RadarReprojector::initialize(const ReprojectorParam& param, std::shared_ptr
     {
         return false;
     }
-    m_jsonDumper = std::make_shared<ReprojectorJsonDumper>(param.dumpFolder);
+    m_jsonDumper = m_param.dump ? std::make_shared<ReprojectorJsonDumper>(m_param.dumpFolder) : nullptr;
     // Compute radar intrinsics from log data.
     if (m_param.useLogIntrinsics)
     {
@@ -384,7 +384,7 @@ void RadarReprojector::reprojectActorDetections(const std::string& actorId)
     // Transform actor points to new sensor frame detections.
     for (const auto& point : bestPointcloud.points)
     {
-        if (point.positionM - actorState.bboxCenterM < actorBboxHalfSize)
+        if (abs(point.positionM - actorState.bboxCenterM) < actorBboxHalfSize)
         {
             auto positionInSensor          = actorToSensor * point.positionM;
             auto positionInWorld           = m_reprojectContext.sensorToWorld * positionInSensor;
@@ -424,10 +424,16 @@ ViewIndex RadarReprojector::findBestStaticScanForTarget(const RadarView& newRada
     }
     // Current best similarity.
     auto[bestSimilarity, bestViewIndex] = frontier.top();
-    // BFS.
+    // Best-first search along each radar's scan chain, bounded by the number of
+    // views scored (`visited`), not by the frontier size: the visited set per
+    // radar is always a contiguous scan interval, so the frontier holds at most
+    // its two ends per radar and never grows past 2 * seeds. A frontier bound
+    // therefore cannot terminate the walk; with near-identical views (e.g. a
+    // stationary ego) the similarity-decay break below never fires either and
+    // the search would visit every scan of every radar for every cell.
     while (!frontier.empty())
     {
-        if (frontier.size() > m_param.maxSearchSize)
+        if (visited.size() > m_param.maxSearchSize)
         {
             break;
         }

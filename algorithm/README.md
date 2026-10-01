@@ -50,7 +50,7 @@ This per-cell decision is the key multi-frame behavior: one output scan can be a
 
 The search first chooses one coarse starting frame per logged radar by minimizing origin and boresight difference. If their number exceeds the configured search budget (`maxSearchSize`), only the closest starting frames are retained.
 
-For each leaf cell, a best-first search scores the starting frames at the cell center, then explores the preceding and following scans in each radar recording. Exploration stops when the frontier exceeds the search budget or the next candidate falls below half of the best similarity found. A search budget of one approximates the original single-candidate behavior.
+For each leaf cell, a best-first search scores the starting frames at the cell center, then explores the preceding and following scans in each radar recording. Exploration stops when the number of scored candidate scans exceeds the search budget or the next candidate falls below half of the best similarity found. A search budget of one approximates the original single-candidate behavior.
 
 ## View similarity
 
@@ -101,7 +101,7 @@ When downsampling is enabled, detections are quantized into azimuth/elevation/ra
 
 ### Controlled trajectory deviation
 
-Unlike direct timestamp-based replay, view-based sampling allows the simulated ego and actors to move away from their logged trajectories while continuing to use observations captured from a compatible perspective. Longitudinal ego changes such as moderate speed differences are generally supported while the simulated pose remains inside the spatial and temporal coverage of the log. A lateral change of roughly one lane (about 2 m) is a useful practical scale, not a guaranteed bound; scene layout and available viewpoints remain decisive. Actor deviations are similarly constrained by whether the log contains observations of that actor from a comparable relative angle.
+Unlike direct timestamp-based replay, view-based sampling allows the simulated ego and actors to move away from their logged trajectories while continuing to use observations captured from a compatible perspective. Longitudinal ego changes such as moderate speed differences are generally supported while the simulated pose remains inside the spatial and directional coverage of the log. A lateral change of roughly one lane (about 3 m) is a useful practical scale, not a guaranteed bound; scene layout and available viewpoints remain decisive. Actor deviations are similarly constrained by whether the log contains observations of that actor from a comparable relative angle.
 
 ### Log-grounded detections
 
@@ -115,6 +115,8 @@ The adaptive grid assigns fine cells to nearby regions, where viewpoint changes 
 
 ### Bounded by log coverage
 
+Source selection depends on sensor pose, not query timestamp: reprojection can continue beyond the log's end while the requested views remain covered. Coverage includes viewing direction; with incomplete surround coverage (e.g., a single front radar), heading deviations toward directions absent from the log cannot be reprojected.
+
 Because the algorithm does not invent detections, it cannot reconstruct a region or actor that was not sufficiently observed in the log. Large ego or actor deviations can therefore produce sparse, mismatched, or missing returns. The practical deviation ranges above are guidance rather than validity guarantees.
 
 ### Occlusion is not recomputed
@@ -124,6 +126,10 @@ The algorithm has no scene geometry for ray casting or visibility testing. Occlu
 ### Radial velocity is underconstrained
 
 A radar detection provides only line-of-sight velocity, so its full three-dimensional velocity cannot be recovered from one measurement. Initialization compensates for ego motion and stores the inferred velocity along the original radar ray; tangential velocity remains unobserved. Radial velocity after a viewpoint change is therefore an approximation, especially for dynamic points. Actor-level motion is incorporated, but it cannot restore the missing tangential component of the original detection.
+
+### Single Precision
+
+The algorithm uses `float` for computation, which has enough digits for common radars that observes ~200 meters with ~0.1 meter distance precision. The math is also designed with care so that we don't accidentally lose precision. However in extreme cases this assumption could still break, e.g. a long session where ego moves >10km and radar sensor has cm-scale accuracy, or invalid detections close to the origin.
 
 ### View selection is predominantly horizontal
 

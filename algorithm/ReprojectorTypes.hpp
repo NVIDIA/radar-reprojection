@@ -40,7 +40,7 @@ struct ReprojectorParam
     bool doDownSampling;             // whether to down sample detections based on resolution
     Eigen::Vector3f bboxScaleFactor; // scale bounding box to incorporate noise
     Eigen::Vector3f bboxMargin;      // add margin to incorporate noise
-    size_t maxSearchSize;            // 30 is usually enough. set to 1 to mimic v1 behavior.
+    size_t maxSearchSize;            // max candidate scans scored per cell. 30 is usually enough. set to 1 to mimic v1 behavior.
     bool dump;
     std::string dumpFolder;
 };

@@ -17,7 +17,7 @@
 
 Subclass RadarReprojectionDataAdapter to plug in a new dataset format. The
 adapter's job is to convert a clip's logged radar + ego/actor data into the
-proto messages the server consumes. Iteration over ego poses for Reproject
+proto messages the server consumes. Iterating the logged scans into Reproject
 calls is handled by reproject_iter.iter_reproject_requests, not by adapters.
 """
 

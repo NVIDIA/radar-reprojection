@@ -16,7 +16,7 @@ For a clip `<clip>` and radar `<radar_id>`, the adapter reads:
 | `calibration/sensor_extrinsics/*.parquet` | `clip_id`, `sensor_name`, `qx`, `qy`, `qz`, `qw`, `x`, `y`, `z` |
 | `calibration/vehicle_dimensions/*.parquet` | `clip_id`, `length`, `width`, `height` |
 
-Calibration files are chunk-level files. The adapter selects rows whose `clip_id` matches the requested clip.
+Calibration files are chunk-level files, and a dataset root holding clips from several chunks holds one file per chunk. The adapter searches every `*.parquet` in the directory, regardless of sort order, and selects rows whose `clip_id` matches the requested clip. If no file has a matching row it raises an error naming the clip and the files searched.
 
 ## Coordinate and unit conventions
 

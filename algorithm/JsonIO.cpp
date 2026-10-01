@@ -17,9 +17,13 @@
 
 #include "algorithm/TransformUtilities.hpp"
 
+#include <cerrno>
+#include <cstring>
+#include <filesystem>
 #include <fstream>
 
 #include "algorithm/BasicTypes.hpp"
+#include "algorithm/Logger.hpp"
 
 namespace radar_reprojection
 {
@@ -130,35 +134,62 @@ void LogDataLoader::loadFromJson(RadarDetection& detection, const Json& j)
 
 ReprojectorJsonDumper::ReprojectorJsonDumper(const std::string& dumpFolder)
 {
-    m_dumpFolder = dumpFolder.back() == '/' ? dumpFolder : dumpFolder + '/';
+    m_dumpFolder = (!dumpFolder.empty() && dumpFolder.back() == '/') ? dumpFolder : dumpFolder + '/';
+    std::error_code ec;
+    m_enabled = !dumpFolder.empty() && std::filesystem::is_directory(dumpFolder, ec);
+    if (!m_enabled)
+    {
+        DW_LOGW << "dump folder '" << dumpFolder
+                << "' is missing or not a directory; JSON dumps (log_data.json, initialize.json, "
+                   "reproject_*.json) are skipped."
+                << dw_log::endl;
+    }
 }
 
-void ReprojectorJsonDumper::dumpLogData(const LogData& data) const
+bool ReprojectorJsonDumper::dumpLogData(const LogData& data) const
 {
-    Json j               = dumpToJson(data);
-    std::string filename = m_dumpFolder + "log_data.json";
-    dumpToFile(filename, j);
+    if (!m_enabled)
+    {
+        return false;
+    }
+    return dumpToFile(m_dumpFolder + "log_data.json", dumpToJson(data));
 }
 
-void ReprojectorJsonDumper::dumpInitializeResult(const InitializeContext& context) const
+bool ReprojectorJsonDumper::dumpInitializeResult(const InitializeContext& context) const
 {
-    Json j               = dumpToJson(context);
-    std::string filename = m_dumpFolder + "initialize.json";
-    dumpToFile(filename, j);
+    if (!m_enabled)
+    {
+        return false;
+    }
+    return dumpToFile(m_dumpFolder + "initialize.json", dumpToJson(context));
 }
 
-void ReprojectorJsonDumper::dumpReprojectResult(const ReprojectContext& context) const
+bool ReprojectorJsonDumper::dumpReprojectResult(const ReprojectContext& context) const
 {
-    Json j               = dumpToJson(context);
+    if (!m_enabled)
+    {
+        return false;
+    }
     std::string filename = m_dumpFolder + "reproject_" + context.input.radarParam.id + "_" + std::to_string(context.input.timestampUs) + ".json";
-    dumpToFile(filename, j);
+    return dumpToFile(filename, dumpToJson(context));
 }
 
-void ReprojectorJsonDumper::dumpToFile(const std::string& path, const Json& j)
+bool ReprojectorJsonDumper::dumpToFile(const std::string& path, const Json& j)
 {
     std::ofstream file(path);
+    if (!file)
+    {
+        DW_LOGW << "failed to open dump file '" << path << "': " << std::strerror(errno) << dw_log::endl;
+        return false;
+    }
     file << j.dump(1, '\t');
     file.close();
+    if (!file)
+    {
+        DW_LOGW << "failed to write dump file '" << path << "'" << dw_log::endl;
+        return false;
+    }
+    return true;
 }
 
 Json ReprojectorJsonDumper::dumpToJson(const LogData& data)

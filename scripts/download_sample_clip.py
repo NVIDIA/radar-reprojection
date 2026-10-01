@@ -24,29 +24,26 @@ Prereqs:
     hf auth login        # accept the dataset license first
 
 Examples:
-    # default: front-center SRR radar for the known sample clip
+    # default: every radar present in the known sample clip
     python scripts/download_sample_clip.py
 
-    # different clip, multiple radars, custom output
+    # different clip, a subset of radars, custom output
     python scripts/download_sample_clip.py \\
         --clip b1234567-... \\
         --radars radar_front_center_srr_0 radar_side_left_srr_0 \\
         --out /tmp/my_sample
 
-    # all radars present in the clip
-    python scripts/download_sample_clip.py --radars all
-
     # pick the first clip that has all requested features
     python scripts/download_sample_clip.py --clip auto
 
     # download the 5 clips with the HIGHEST perception quality_score (NuRec ratings)
-    python scripts/download_sample_clip.py --top-k 5 --radars all
+    python scripts/download_sample_clip.py --top-k 5
 
     # ...or the 5 LOWEST-quality clips
-    python scripts/download_sample_clip.py --top-k 5 --order lowest --radars all
+    python scripts/download_sample_clip.py --top-k 5 --order lowest
 
     # estimate download size first
-    python scripts/download_sample_clip.py --radars all --dry-run
+    python scripts/download_sample_clip.py --dry-run
 """
 from __future__ import annotations
 
@@ -57,7 +54,7 @@ import sys
 import zipfile
 
 DEFAULT_CLIP = "25cd4769-5dcf-4b53-a351-bf2c5deb6124"
-DEFAULT_RADARS = ["radar_front_center_srr_0"]
+DEFAULT_RADARS = ["all"]
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 DEFAULT_OUT = REPO_ROOT / "sample_data"
 
@@ -78,7 +75,7 @@ def parse_args() -> argparse.Namespace:
                         f"Default: {DEFAULT_CLIP}")
     p.add_argument("--radars", nargs="+", default=DEFAULT_RADARS,
                    help="Radar feature names (e.g. radar_front_center_srr_0), or 'all' for every "
-                        "radar present in the clip. Default: %(default)s")
+                        "radar present in the clip. Default: all")
     p.add_argument("--out", type=pathlib.Path, default=DEFAULT_OUT,
                    help=f"Output directory. Default: {DEFAULT_OUT.relative_to(REPO_ROOT)}/")
     p.add_argument("--top-k", type=int, default=None, metavar="K",
@@ -87,8 +84,8 @@ def parse_args() -> argparse.Namespace:
                         f"{NUREC_REPO_ID} 'clip_ratings' CSV; candidates are restricted to clips "
                         "present in this dataset with the requested radars + labels + calibration. "
                         "Overrides --clip. NOTE: NuRec-rated clips use the srr_3/mrr_2 radar "
-                        "config, so pair with '--radars all' — the default radar_front_center_srr_0 "
-                        "matches no rated clip.")
+                        "config, covered by the default '--radars all'; explicitly requesting an "
+                        "srr_0 radar (e.g. radar_front_center_srr_0) matches no rated clip.")
     p.add_argument("--order", choices=["highest", "lowest"], default="highest",
                    help="With --top-k, take the highest- or lowest-quality clips. Default: %(default)s")
     p.add_argument("--dry-run", action="store_true",

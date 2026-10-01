@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 load("@pip//:requirements.bzl", "requirement")
 
@@ -65,6 +68,16 @@ py_test(
         "//config:radar_intrinsics_json",
     ],
     main = "test/physical_ai_av_adapter_test.py",
+)
+
+py_test(
+    name = "physical_ai_av_calibration_test",
+    srcs = ["test/physical_ai_av_calibration_test.py"],
+    deps = [
+        ":physical_ai_av_adapter",
+        requirement("pyarrow"),
+    ],
+    main = "test/physical_ai_av_calibration_test.py",
 )
 
 py_binary(
