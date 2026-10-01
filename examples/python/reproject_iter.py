@@ -20,6 +20,7 @@ below are also re-used by physical_ai_av_adapter to convert obstacle poses
 from ego frame to world frame.
 """
 
+import math
 from typing import Iterator, Optional
 
 import numpy as np
@@ -105,6 +106,41 @@ def invert_pose(p: pb.Pose) -> pb.Pose:
 
 
 # ---------------------------------------------------------------------------
+# Ego-frame pose shifting
+# ---------------------------------------------------------------------------
+
+def make_planar_shift_pose(lateral_m: float, longitudinal_m: float,
+                           heading_rad: float) -> pb.Pose:
+    """Build a planar shift expressed in the ego/body frame.
+
+    Ego frame convention: +x forward, +y left, +z up. So `longitudinal_m`
+    maps to +x, `lateral_m` to +y, and `heading_rad` is a yaw about +z
+    (counter-clockwise / to the left, positive).
+    """
+    out = pb.Pose()
+    out.translation.CopyFrom(pb.Vec3f(x=longitudinal_m, y=lateral_m, z=0.0))
+    half = 0.5 * heading_rad
+    out.rotation.CopyFrom(pb.Quaternionf(x=0.0, y=0.0,
+                                         z=math.sin(half), w=math.cos(half)))
+    return out
+
+
+def shift_actor_state(state: pb.ActorState, shift: pb.Pose) -> pb.ActorState:
+    """Return a copy of `state` with `shift` applied in the state's body frame.
+
+    to_world' = to_world * shift, and from_world is re-derived from it. This
+    is a pure pose shift: the logged world-frame velocity is kept, so a
+    heading shift rotates the sensor while the motion through the world is
+    unchanged. Timestamp and the body-frame bbox fields carry over.
+    """
+    out = pb.ActorState()
+    out.CopyFrom(state)
+    out.to_world.CopyFrom(compose_poses(state.to_world, shift))
+    out.from_world.CopyFrom(invert_pose(out.to_world))
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Trajectory interpolation
 # ---------------------------------------------------------------------------
 
@@ -153,30 +189,49 @@ def slerp_actor_state(
     return out
 
 
-def iter_reproject_requests(log_data: pb.LogData) -> Iterator[pb.ReprojectRequest]:
-    """Yield one ReprojectRequest per (ego_state, radar) pair.
+def iter_reproject_requests(
+    log_data: pb.LogData,
+    ego_shift: Optional[pb.Pose] = None,
+) -> Iterator[pb.ReprojectRequest]:
+    """Yield one ReprojectRequest per logged radar scan.
 
-    Iteration order: ego timestamps ascending, radar ids sorted alphabetically.
-    Actor states are interpolated to each ego timestamp; actors whose
-    trajectory does not bracket the ego timestamp are skipped (no extrapolation).
+    Requests follow the radars' own scan timestamps, merged across all radars
+    in ascending order (ties broken by radar id). E.g. radar A scanning at
+    t=10,30,50 and radar B at t=20,40,60 yield requests (10, A), (20, B),
+    (30, A), (40, B), (50, A), (60, B).
+
+    The ego state is interpolated (slerp) to each scan timestamp; scans whose
+    timestamp falls outside the ego trajectory's time range are skipped, as
+    are actors whose trajectory does not bracket the timestamp (no
+    extrapolation in either case).
+
+    If `ego_shift` is given (an ego/body-frame pose, e.g. from
+    make_planar_shift_pose), every request's ego state is shifted by it while
+    actors stay on their logged trajectories, so reprojection is requested
+    from the deviated ego pose.
     """
-    ego_states = sorted(
-        log_data.log_actor_data.ego_trajectory.states,
-        key=lambda s: s.timestamp_us,
+    schedule = sorted(
+        (scan.timestamp_us, radar_id)
+        for radar_id, rec in log_data.log_radar_data.items()
+        for scan in rec.scans
     )
-    radar_ids = sorted(log_data.log_radar_data.keys())
+    ego_traj = pb.ActorTrajectory()
+    ego_traj.states.extend(
+        sorted(log_data.log_actor_data.ego_trajectory.states,
+               key=lambda s: s.timestamp_us))
 
-    for ego in ego_states:
-        actor_states_at_t: dict[str, pb.ActorState] = {}
+    for t_us, radar_id in schedule:
+        ego = slerp_actor_state(ego_traj, t_us)
+        if ego is None:
+            continue
+        if ego_shift is not None:
+            ego = shift_actor_state(ego, ego_shift)
+        req = pb.ReprojectRequest()
+        req.timestamp_us = t_us
+        req.radar_param.CopyFrom(log_data.log_radar_data[radar_id].param)
+        req.ego_state.CopyFrom(ego)
         for actor_id, traj in log_data.log_actor_data.actor_to_trajectory.items():
-            interp = slerp_actor_state(traj, ego.timestamp_us)
+            interp = slerp_actor_state(traj, t_us)
             if interp is not None:
-                actor_states_at_t[actor_id] = interp
-        for radar_id in radar_ids:
-            req = pb.ReprojectRequest()
-            req.timestamp_us = ego.timestamp_us
-            req.radar_param.CopyFrom(log_data.log_radar_data[radar_id].param)
-            req.ego_state.CopyFrom(ego)
-            for k, v in actor_states_at_t.items():
-                req.actor_to_state[k].CopyFrom(v)
-            yield req
+                req.actor_to_state[actor_id].CopyFrom(interp)
+        yield req

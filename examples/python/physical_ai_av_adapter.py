@@ -26,6 +26,8 @@ import json
 import pathlib
 from typing import Optional
 
+import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 from examples.python import adapter, reproject_iter as ri
@@ -104,13 +106,32 @@ class PhysicalAIAVAdapter(adapter.RadarReprojectionDataAdapter):
                 radars.append(radar_id)
         return radars
 
-    def _find_unique_parquet(self, subdir: pathlib.Path) -> pathlib.Path:
+    def _read_clip_calibration(self, subdir: pathlib.Path) -> pa.Table:
+        """Rows of every calibration chunk under `subdir` whose clip_id is this clip.
+
+        Calibration is stored per dataset chunk, and a dataset root holding
+        several clips can hold several chunk files. Every `*.parquet` is
+        searched regardless of sort order; the error names the clip and the
+        files searched so a missing download is easy to tell apart.
+        """
         if not subdir.exists():
             raise FileNotFoundError(f"PhysicalAIAVAdapter: directory missing: {subdir}")
-        for entry in sorted(subdir.iterdir()):
-            if entry.suffix == ".parquet":
-                return entry
-        raise FileNotFoundError(f"PhysicalAIAVAdapter: no .parquet under {subdir}")
+        files = sorted(f for f in subdir.iterdir() if f.suffix == ".parquet")
+        if not files:
+            raise FileNotFoundError(f"PhysicalAIAVAdapter: no .parquet under {subdir}")
+        matches = []
+        for f in files:
+            table = pq.read_table(str(f))
+            rows = table.filter(pc.equal(table.column("clip_id"), self._clip_uuid))
+            if rows.num_rows:
+                matches.append(rows)
+        if not matches:
+            names = ", ".join(f.name for f in files)
+            raise RuntimeError(
+                f"PhysicalAIAVAdapter: no calibration rows for clip {self._clip_uuid} "
+                f"under {subdir}; searched {len(files)} chunk file(s): {names}. "
+                f"Download the clip's calibration chunk into this dataset root.")
+        return pa.concat_tables(matches)
 
     def _load_intrinsics_config(self) -> dict[str, dict]:
         with open(self._intrinsics_config, "r") as f:
@@ -137,18 +158,15 @@ class PhysicalAIAVAdapter(adapter.RadarReprojectionDataAdapter):
         return intrinsics_table[best_key]
 
     def _load_extrinsics(self) -> dict[str, pb.Pose]:
-        path = self._find_unique_parquet(self._dataset_root / "calibration" / "sensor_extrinsics")
-        table = pq.read_table(str(path))
-        clip_col   = table.column("clip_id").to_pylist()
+        table = self._read_clip_calibration(
+            self._dataset_root / "calibration" / "sensor_extrinsics")
         sensor_col = table.column("sensor_name").to_pylist()
         qx = table.column("qx").to_pylist(); qy = table.column("qy").to_pylist()
         qz = table.column("qz").to_pylist(); qw = table.column("qw").to_pylist()
         x  = table.column("x").to_pylist();  y  = table.column("y").to_pylist()
         z  = table.column("z").to_pylist()
         out: dict[str, pb.Pose] = {}
-        for i, cid in enumerate(clip_col):
-            if cid != self._clip_uuid:
-                continue
+        for i in range(table.num_rows):
             p = pb.Pose()
             p.translation.x = float(x[i]); p.translation.y = float(y[i]); p.translation.z = float(z[i])
             # Normalize the quaternion to be defensive against minor float drift.
@@ -157,23 +175,16 @@ class PhysicalAIAVAdapter(adapter.RadarReprojectionDataAdapter):
             p.rotation.x = qx_i / norm; p.rotation.y = qy_i / norm
             p.rotation.z = qz_i / norm; p.rotation.w = qw_i / norm
             out[sensor_col[i]] = p
-        if not out:
-            raise RuntimeError(f"No extrinsics rows for clip {self._clip_uuid} in {path}")
         return out
 
     def _load_vehicle_dims(self) -> dict[str, float]:
-        path = self._find_unique_parquet(self._dataset_root / "calibration" / "vehicle_dimensions")
-        table = pq.read_table(str(path))
-        clip_col = table.column("clip_id").to_pylist()
-        for i, cid in enumerate(clip_col):
-            if cid != self._clip_uuid:
-                continue
-            return {
-                "length": float(table.column("length")[i].as_py()),
-                "width":  float(table.column("width")[i].as_py()),
-                "height": float(table.column("height")[i].as_py()),
-            }
-        raise RuntimeError(f"No vehicle_dimensions row for clip {self._clip_uuid} in {path}")
+        table = self._read_clip_calibration(
+            self._dataset_root / "calibration" / "vehicle_dimensions")
+        return {
+            "length": float(table.column("length")[0].as_py()),
+            "width":  float(table.column("width")[0].as_py()),
+            "height": float(table.column("height")[0].as_py()),
+        }
 
     def _build_ego_trajectory(self, bbox_half: pb.Vec3f) -> pb.ActorTrajectory:
         path = (self._dataset_root / "labels" / "egomotion" /

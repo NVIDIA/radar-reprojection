@@ -76,16 +76,19 @@ private:
     std::shared_ptr<LogData> m_logDataPtr;
 };
 
+/// Best-effort JSON dumps: an unusable folder warns once and disables dumping.
 class ReprojectorJsonDumper
 {
 public:
     explicit ReprojectorJsonDumper(const std::string& dumpFolder);
-    void dumpLogData(const LogData& data) const;
-    void dumpInitializeResult(const InitializeContext& context) const;
-    void dumpReprojectResult(const ReprojectContext& context) const;
+    bool enabled() const { return m_enabled; }
+    /// Return true if the file was written.
+    bool dumpLogData(const LogData& data) const;
+    bool dumpInitializeResult(const InitializeContext& context) const;
+    bool dumpReprojectResult(const ReprojectContext& context) const;
 
 private:
-    static void dumpToFile(const std::string& path, const Json& j);
+    static bool dumpToFile(const std::string& path, const Json& j);
     template <typename T>
     static Json dumpToJson(const std::vector<T>& vector)
     {
@@ -140,6 +143,7 @@ private:
     static Json dumpToJson(size_t index);
 
     std::string m_dumpFolder;
+    bool m_enabled{false};
 };
 
 } // namespace algorithm

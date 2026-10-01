@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 def _impl(ctx):
     prefix = ctx.os.environ.get(ctx.attr.conda_prefix_env)
     if not prefix:

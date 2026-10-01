@@ -66,7 +66,7 @@ bool RadarView::contains(const Eigen::Vector2f& positionM) const
 {
     Eigen::Vector2f sensorToTarget = positionM - originM;
     float32_t sensorToTargetRad    = std::atan2(sensorToTarget[1], sensorToTarget[0]);
-    return sensorToTarget.norm() < radiusM && withinFov(sensorToTargetRad - azimuthRad);
+    return sensorToTarget.norm() <= radiusM && withinFov(sensorToTargetRad - azimuthRad);
 }
 
 float32_t RadarView::iou(const RadarView& other) const

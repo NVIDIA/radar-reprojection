@@ -27,7 +27,8 @@ standalone.
    - `ReprojectorParam` — tuning knobs: `useLogIntrinsics`, `doDownSampling`,
      `bboxScaleFactor`/`bboxMargin` (actor bbox dilation for occlusion/noise),
      `maxSearchSize` (default 30; set 1 to mimic v1 behavior), `dump` +
-     `dumpFolder`.
+     `dumpFolder` (best-effort: an unusable folder warns on stderr and skips
+     dumps; `initialize()` still succeeds).
    - `ReprojectInput` = `{ timestampUs, radarParam, egoState, actorToState }`.
      The caller interpolates `ActorState`s (slerp) before calling `reproject()`.
    - `RadarScan{ timestampUs, detections[] }`; each `RadarDetection` carries a
@@ -59,15 +60,17 @@ standalone.
    - `reproject_iter.py` — pose-math helpers (`slerp_quat`, `lerp_pose`,
      `compose_poses`, `invert_pose`, `quat_to_rot_matrix`, …), `slerp_actor_state`,
      and `iter_reproject_requests(log_data)` which yields one `pb.ReprojectRequest`
-     per (ego_state, radar) pair in deterministic order.
+     per logged radar scan, following the radars' scan timestamps merged in
+     ascending order (ties broken by radar id); the ego state is interpolated
+     to each scan timestamp.
    - `run_clip.py` — CLI client: load clip → `Initialize` → `Reproject` per
-     (ego pose × radar), with optional PNG / live plotting.
+     logged radar scan, with optional PNG / live plotting.
    - `smoke_client.py` — minimal connectivity client.
 
 ### Repo layout
 
 ```
-algorithm/      pure C++ reprojection lib (+ algorithm_demo, JsonIO)
+algorithm/      pure C++ reprojection lib (+ JsonIO)
 proto/          radar_reprojector.proto (+ generated *_pb2 under bazel-bin/)
 server/         gRPC server (thin protobuf<->algorithm translation)
 examples/python/ adapter framework + run_clip / smoke_client + tests
@@ -134,25 +137,26 @@ The dataset is gated. Accept its license on Hugging Face and run `hf auth login`
 ```bash
 conda activate radar_reprojection
 python scripts/download_sample_clip.py                 # defaults (below)
-python scripts/download_sample_clip.py --radars all    # every radar in the clip
+python scripts/download_sample_clip.py --radars radar_front_center_srr_0     # a subset of radars
 python scripts/download_sample_clip.py --clip auto     # pick a new clip
-python scripts/download_sample_clip.py --top-k 5 --radars all                # 5 highest-quality clips
-python scripts/download_sample_clip.py --top-k 5 --order lowest --radars all # 5 lowest-quality clips
+python scripts/download_sample_clip.py --top-k 5                 # 5 highest-quality clips
+python scripts/download_sample_clip.py --top-k 5 --order lowest  # 5 lowest-quality clips
 python scripts/download_sample_clip.py --help
 ```
 
-Defaults: `--clip 25cd4769-5dcf-4b53-a351-bf2c5deb6124`,
-`--radars radar_front_center_srr_0`, `--out sample_data`. Use `--radars all` to
-get the full set (9 SRR radars: front-center, side-left/right,
-corner-front/rear-left/right, rear-left/right).
+Defaults: `--clip 25cd4769-5dcf-4b53-a351-bf2c5deb6124`, `--radars all`
+(every radar present in the clip; for the sample clip that is 9 SRR radars:
+front-center, side-left/right, corner-front/rear-left/right, rear-left/right),
+`--out sample_data`.
 
 `--top-k K` selects the K clips with the highest (or `--order lowest`) perception
 `quality_score` instead of a single `--clip`. Scores come from the sibling
 `nvidia/PhysicalAI-Autonomous-Vehicles-NuRec` dataset's
 `clip_ratings_<version>.csv` (the base dataset has no score); candidates are
 restricted to rated clips available here with the requested radars + labels +
-calibration. Rated clips use the `srr_3`/`mrr_2` radar config, so pair `--top-k`
-with `--radars all` — the default `radar_front_center_srr_0` matches no rated clip.
+calibration. Rated clips use the `srr_3`/`mrr_2` radar config, covered by the
+default `--radars all`; explicitly requesting an `srr_0` radar
+(e.g. `radar_front_center_srr_0`) matches no rated clip.
 
 ## 4. Build & test
 
@@ -162,16 +166,16 @@ bazel build //...
 bazel test  //...          # algorithm + server + Python adapter tests
 ```
 
-Server build variants:
+Builds are optimized (`-c opt`) by default via `.bazelrc`; it applies to every
+target — libs, binaries, and tests. Overrides:
 
 ```bash
-bazel build -c opt          //server:radar_reprojection_server   # optimized
-bazel build --config=debug  //server:radar_reprojection_server   # debug
+bazel build --config=debug  //server:radar_reprojection_server   # -c dbg -O0 -g
+bazel build -c fastbuild    //server:radar_reprojection_server   # unoptimized fastbuild
 ```
 
 Key targets:
 - `//:algorithm` — algorithm-only C++ static lib (Eigen + nlohmann-json + logger).
-- `//:algorithm_demo` — standalone demo; replays a `log_data.json` dump at a frame.
 - `//server:radar_reprojection_server` — gRPC server.
 - `//examples/python:smoke_client` — minimal in-process smoke client.
 - `//examples/python:run_clip` — full CLI driver.
@@ -188,7 +192,9 @@ bazel run //server:radar_reprojection_server -- --address=0.0.0.0:50051
 ```
 
 Drive a clip end-to-end in another shell (loads via `PhysicalAIAVAdapter`, calls
-`Initialize`, then `Reproject` per ego pose × radar):
+`Initialize`, then `Reproject` per logged radar scan — the selected radars'
+scan timestamps are merged in ascending order and the ego pose is interpolated
+to each one):
 
 ```bash
 source scripts/env.sh
@@ -201,12 +207,34 @@ bazel run //examples/python:run_clip -- \
 
 `run_clip` flags:
 - `--radars <id> [<id> …]` — restrict to a subset of radar ids (default: all loaded).
+- `--ego-shift LAT_M LON_M HEADING_DEG` — reproject from a pose offset from the
+  logged ego pose, given in ego frame: lateral metres (+left), longitudinal
+  metres (+forward), heading degrees (+CCW). A pure pose shift: the logged
+  world-frame ego velocity is kept; actors stay on their logged trajectories.
+  When plotting, the logged (black dashed) and shifted (magenta) ego
+  trajectories are overlaid on every frame.
+- `--dummy` — no server needed: each request is answered with the exact
+  original logged scan for that radar + timestamp, in the regular response
+  format (identity baseline; plotting and summaries work unchanged). Plots
+  overlay the logged ego trajectory.
 - `--plot-output-dir <dir>` — save a per-frame top-down PNG to
-  `<dir>/<radar_id>/ego_<index>.png` (headless `Agg`; works under `bazel run`).
-- `--plot-every N` — only plot every N-th ego pose.
+  `<dir>/<radar_id>/scan_<index>.png` (headless `Agg`; works under `bazel run`).
+- `--plot-every N` — only plot every N-th scan.
 - `--show` — live interactive window (§6; **does not work under `bazel run`**).
 
-On load it prints the ego/radar/actor counts and the radar id list. Connectivity
+Shifted-pose replay example — reproject as if the ego drove 2 m further left
+with a 15-degree leftward heading, saving PNGs with both trajectories overlaid:
+
+```bash
+bazel run //examples/python:run_clip -- \
+    --address=localhost:50051 \
+    --dataset-root=sample_data \
+    --clip=25cd4769-5dcf-4b53-a351-bf2c5deb6124 \
+    --intrinsics-config=config/radar_intrinsics.json \
+    --ego-shift 2 0 15 --plot-output-dir=reproject_plots
+```
+
+On load it prints the ego/radar/scan/actor counts and the radar id list. Connectivity
 check: `bazel run //examples/python:smoke_client -- --address=localhost:50051`.
 
 ## 6. Live / on-the-fly plotting (`--show`) — run the client outside Bazel
@@ -260,7 +288,13 @@ PYTHONPATH=.:bazel-bin python -m examples.python.run_clip \
 - **`CONDA_PREFIX env var is not set`** → `source scripts/env.sh` in this shell.
 - **Missing `eigen3` headers** → `conda install -c conda-forge eigen=3.4 -y` in the env.
 - **`sample_data/` empty / adapter test fails** → run `scripts/download_sample_clip.py`
-  (use `--radars all` for the full set).
+  (downloads every radar of the sample clip by default).
+- **`no calibration rows for clip <uuid> under .../calibration/...`** → that clip's
+  calibration chunk is not in this dataset root; re-run `download_sample_clip.py --clip <uuid>`.
+  Several clips may share one root: every `*.chunk_NNNN.parquet` under `calibration/` is searched.
+- **`[W] dump folder '<path>' is missing or not a directory`** → `dump=true` but the
+  folder does not exist or is a regular file. Dumps are skipped and reprojection
+  continues; create the directory before `Initialize` to get `log_data.json` etc.
 - **gRPC `UNAVAILABLE` / `UNIMPLEMENTED`** → unset proxies before running:
   `unset http_proxy https_proxy ALL_PROXY HTTP_PROXY HTTPS_PROXY`.
 - **`--show` shows no window / "FigureCanvasAgg is non-interactive"** → you ran it
@@ -270,9 +304,10 @@ PYTHONPATH=.:bazel-bin python -m examples.python.run_clip \
 - **Quaternion ordering** on the wire is `pb.Quaternionf{x,y,z,w}` = `Eigen::Quaternionf`
   (Hamilton convention, `w` scalar); parquet uses the same order, so the adapter
   copies fields without reordering.
-- **Out-of-window actors are silently dropped**: `iter_reproject_requests` (and the
-  adapter) skip actors whose trajectory does not bracket the ego timestamp — no
-  extrapolation.
+- **Out-of-window states are silently dropped**: `iter_reproject_requests` skips
+  scans whose timestamp falls outside the ego trajectory's range, and (like the
+  adapter) skips actors whose trajectory does not bracket the scan timestamp —
+  no extrapolation.
 - **`ReferenceIndex`** on each detection is the only provenance link back to the
   source log sample; preserve it through post-processing.
 - The algorithm lib pins `-std=c++20` and disables the `maybe-uninitialized`
@@ -283,8 +318,8 @@ PYTHONPATH=.:bazel-bin python -m examples.python.run_clip \
 ## 8. Extending to another dataset
 
 Subclass `examples.python.adapter.RadarReprojectionDataAdapter` and emit a
-`pb.LogData`; use it in place of `PhysicalAIAVAdapter`. Ego-pose iteration and
-actor-state interpolation are handled by
+`pb.LogData`; use it in place of `PhysicalAIAVAdapter`. Scan iteration and
+ego/actor-state interpolation are handled by
 `examples.python.reproject_iter.iter_reproject_requests`, which works with any
 `pb.LogData`. The algorithm and server stay dataset-agnostic — clients send
 `pb.LogData` over the wire.

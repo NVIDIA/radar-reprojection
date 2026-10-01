@@ -1,196 +1,55 @@
 # Radar Reprojection
 
-A generic radar reprojection library for closed-loop sensor simulation: given logged radar scans plus ego/actor trajectories, synthesize realistic radar points from different ego poses in the closed-loop simulation.
+This repository contains the code, documentation, and evaluation results for an open-source radar reprojection library designed for autonomous driving simulation. As part of the **NVIDIA Physical AI** and **NuRec** ecosystems, this library provides a reference, data-driven approach to realistic radar signal simulation. It reprojects logged radar points to new 3D locations with velocity adjustments—maintaining fidelity even when the ego vehicle diverges during closed-loop testing.
 
-**Status — Lightweight C++; CPU only; Battle tested.** The repo has been migrated from the NVIDIA NDAS production simulation system. It builds standalone with Bazel (bzlmod, Linux) and reads the open [PhysicalAI-Autonomous-Vehicles](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles) dataset format. It runs on CPU and accompanies with the GPU based main NuRec rendeering libraries during closed-loop simulation.
+## Key Features
 
-See [`algorithm/README.md`](algorithm/README.md) for the reprojection method, adaptive multi-frame sampling, and view-selection model.
+* **Data-Driven Simulation:** Generates realistic radar signals based on original sensor data.
+* **Production-Grade Roots:** Migrated directly from the NVIDIA NDAS production simulation system.
+* **Standalone Build:** Compiles independently using Bazel (`bzlmod` on Linux).
+* **Open Dataset Integration:** Native support for the open [PhysicalAI-Autonomous-Vehicles](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles) dataset format.
+* **Hybrid Execution:** Runs efficiently on the CPU while pairing seamlessly with GPU-based NuRec rendering libraries and simulation pipelines.
 
-## Project policies
+## Visual Example
 
-- [License](LICENSE)
-- [Contribution policy (external pull requests are not accepted)](CONTRIBUTING.md)
-- [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Security Policy](SECURITY.md)
+Below is a side-by-side visual comparison (**Left:** Original log | **Right:** Closed-loop simulation). Despite a 3-meter lateral shift in the ego vehicle's trajectory (the purple path in the right frame), the reprojection algorithm generates highly consistent radar points across all timestamps—yielding near-identical object detection and tracking results in the NVIDIA NDAS system.
 
-```
-bazel build //...
-bazel test  //...
-```
+<p align="center">
+  <a href="./docs/images/radar_reprojection_comparison.gif" target="_blank">
+    <img src="./docs/images/radar_reprojection_comparison.gif" width="800" alt="Radar Reprojection Comparison - Click to view full size">
+  </a>
+</p>
 
-## Environment setup
+## Ablation Study
 
-A conda env `radar_reprojection` is required: it provides Eigen C++ headers that the algorithm build links against (via `new_local_repository` against `$CONDA_PREFIX`), and the `physical_ai_av` Python package (the PyPI dataset SDK) used by `scripts/download_sample_clip.py`. See [`docs/DESIGN.md`](docs/DESIGN.md) §"Bazel workspace".
+Evaluating quantitative performance for the radar reprojection algorithm depends heavily on the specific radar hardware and downstream perception pipeline, making a single benchmark metric impractical. Instead, we present an ablation study using our internal NDAS perception system to evaluate algorithmic robustness against ego pose divergence — a common issue in closed-loop simulations.
 
-### One-time
+The plots below illustrate how synthetic ego-pose divergence (ranging from baseline to extreme conditions, such as 4 meters of lateral offset and a 40-degree heading change) affects 3D bounding-box obstacle detection ([F1 score](https://en.wikipedia.org/wiki/F-score)):
 
-```bash
-conda create -n radar_reprojection python=3.11 -y
-conda activate radar_reprojection
-pip install physical_ai_av
-conda install -c conda-forge eigen=3.4 -y
-```
+* **Radar-Only:** F1 scores drop from 90% down to ~49%. (Note: "V2" is the latest open-source release, and `maxSearchSize` denotes the number of temporal frames used for multi-frame search; `maxSearchSize=30` is the recommended setting.)
+* **Fused Camera + Radar:** Because radar is rarely used in isolation, pairing it with NuRec-rendered camera frames significantly buffers performance loss, keeping fused F1 scores between 98% and 87% across the same range.
 
-### Download sample data
+**Key Takeaways**
+The radar reprojection algorithm maintains reliable accuracy within normal ranges of ego pose divergence. However, supporting extreme pose errors with high robustness will require further algorithm extension, such as integration with generative Diffusion models.
 
-The PhysicalAI-AV dataset is gated. Accept its license on Hugging Face, then authenticate before downloading:
+<p align="center">
+  <a href="./docs/images/radar_reprojection_perception_robustness.png" target="_blank">
+    <img src="./docs/images/radar_reprojection_perception_robustness.png" width="800" alt="Radar Reprojection Robustness - Click to view full size">
+  </a>
+</p>
 
-```bash
-hf auth login
-```
+## Documentation & Quick Start
 
-```bash
-conda activate radar_reprojection
-python scripts/download_sample_clip.py                 # defaults
-python scripts/download_sample_clip.py --radars all    # every radar in the clip
-python scripts/download_sample_clip.py --clip auto     # pick a new clip
-python scripts/download_sample_clip.py --top-k 5 --radars all               # 5 highest perception-quality clips
-python scripts/download_sample_clip.py --top-k 5 --order lowest --radars all # 5 lowest-quality clips
-python scripts/download_sample_clip.py --help
-```
+* **[`algorithm/README.md`](algorithm/README.md):** Deep dive into the reprojection algorithm, adaptive multi-frame sampling, and the view-selection model.
+* **[`docs/USAGE.md`](docs/USAGE.md):** Detailed instructions for building and running the library.
+* **[`SKILL.md`](SKILL.md):** Context file for AI coding assistants to help automate integration into your existing codebase.
 
-`--top-k K` downloads the K clips with the highest (or `--order lowest`)
-perception `quality_score`, read from the sibling
-[`PhysicalAI-Autonomous-Vehicles-NuRec`](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles-NuRec)
-dataset's `clip_ratings_<version>.csv` (the base dataset carries no score).
-Candidates are restricted to rated clips that exist here with the requested
-radars + labels + calibration. Rated clips use the `srr_3`/`mrr_2` radar config,
-so pair `--top-k` with `--radars all` — the default `radar_front_center_srr_0`
-matches no rated clip.
+## Project Policies
 
-### Building
+This project is currently not accepting contributions.
 
-The Bazel build needs `bazelisk` on PATH and `CONDA_PREFIX` pointing at the
-`radar_reprojection` env. Source the helper once per shell, or set them yourself:
-
-```bash
-source scripts/env.sh
-# equivalent to:
-#   export PATH=$HOME/.local/bin:$PATH        # for bazelisk
-#   export CONDA_PREFIX=$(conda info --base)/envs/radar_reprojection
-
-bazel build //...
-bazel test  //...
-```
-
-If `bazel` complains "CONDA_PREFIX env var is not set", you forgot to source
-`scripts/env.sh` (or run the manual exports) in this shell.
-
-### Running the gRPC server
-
-`server/MainServer.cpp` produces a standalone gRPC server that exposes
-`algorithm::RadarReprojector` over the wire. Build and run from the
-repo root:
-
-```bash
-bazel build //server:radar_reprojection_server
-bazel run   //server:radar_reprojection_server -- --address=0.0.0.0:50051
-```
-
-Server flags: `--address=HOST:PORT`, `--max-message-mb=N` (default 256), `--num-threads=N`, and `--help`.
-
-Optimized build:
-
-```bash
-bazel build -c opt //server:radar_reprojection_server
-```
-
-Debug build:
-
-```bash
-bazel build --config=debug //server:radar_reprojection_server
-```
-
-Run all tests (algorithm + server + Python adapter):
-
-```bash
-bazel test //...
-```
-
-A trivial Python smoke client is at `examples/python/smoke_client.py`:
-
-```bash
-bazel run //examples/python:smoke_client -- --address=localhost:50051
-```
-
-A full clip can be driven end-to-end with `examples/python/run_clip.py`. It
-loads a PhysicalAI-AV clip via `PhysicalAIAVAdapter`, calls `Initialize`,
-then calls `Reproject` once per ego pose × radar:
-
-```bash
-bazel run //examples/python:run_clip -- \
-    --address=localhost:50051 \
-    --dataset-root=sample_data \
-    --clip=25cd4769-5dcf-4b53-a351-bf2c5deb6124 \
-    --intrinsics-config=config/radar_intrinsics.json
-```
-
-Add `--plot-output-dir=reproject_plots` to save each reprojected frame as
-`reproject_plots/<radar_id>/ego_<index>.png` (throttle with `--plot-every=N`).
-This works under `bazel run` because it uses the headless `Agg` backend.
-
-### Live / on-the-fly plotting
-
-`run_clip.py` can also open an interactive top-down window that updates on the
-fly as each `(ego pose, radar)` is reprojected (`--show`), on top of — or
-instead of — the saved PNGs. It uses **one shared window** that is cleared and
-redrawn for every frame — one radar at a time, with radars selected by
-`--radars` cycling through it. The view is fixed at ±100 m on both axes with a
-grid, so it stays put instead of autoscaling frame to frame.
-
-A live window needs an *interactive* matplotlib backend, which is **not
-available under `bazel run`**: Bazel uses a hermetic, statically-linked Python
-whose built-in `_tkinter` cannot be loaded by matplotlib's Tk backend, and no
-other GUI toolkit is bundled. Run the client as plain Python from the
-`radar_reprojection` conda env instead — its matplotlib drives the conda Tk
-(`TkAgg`) and opens a real window. The C++ gRPC server still runs under Bazel.
-
-One-time — install the Python client dependencies (grpcio, protobuf, numpy,
-pyarrow, matplotlib) into the env:
-
-```bash
-conda activate radar_reprojection
-pip install -r requirements.txt
-```
-
-Then run the server and the live client in two shells:
-
-```bash
-# Build once so the generated protobuf Python modules exist under bazel-bin/
-source scripts/env.sh
-bazel build //examples/python:run_clip
-
-# Shell 1 — gRPC server (Bazel)
-bazel run //server:radar_reprojection_server -- --address=0.0.0.0:50051
-
-# Shell 2 — client with a live window (plain Python, from the repo root)
-conda activate radar_reprojection
-PYTHONPATH=.:bazel-bin python -m examples.python.run_clip \
-    --address=localhost:50051 \
-    --dataset-root=sample_data \
-    --clip=25cd4769-5dcf-4b53-a351-bf2c5deb6124 \
-    --intrinsics-config=config/radar_intrinsics.json \
-    --show
-```
-
-`PYTHONPATH=.:bazel-bin` puts the repo root (for the `examples.python` and
-`proto` source packages) and Bazel's generated `proto/*_pb2.py` modules on the
-import path — rebuild with `bazel build //examples/python:run_clip` after
-editing `radar_reprojector.proto` so the generated modules stay in sync.
-`--show` combines with `--plot-output-dir` / `--plot-every`. The final frame
-stays on screen until you close the window.
-
-If the client fails with confusing `UNAVAILABLE` / `UNIMPLEMENTED` errors,
-check whether `http_proxy` / `https_proxy` are set in your shell — gRPC
-honors those for outgoing connections. Unset them before running:
-
-```bash
-unset http_proxy https_proxy ALL_PROXY HTTP_PROXY HTTPS_PROXY
-```
-
-To plug in a different dataset format, subclass
-`examples.python.adapter.RadarReprojectionDataAdapter` and pass your
-implementation in place of `PhysicalAIAVAdapter`. Iteration over ego poses
-and actor-state interpolation are handled by
-`examples.python.reproject_iter.iter_reproject_requests`, which works with
-any `pb.LogData`.
+* [License](LICENSE)
+* [Contribution Policy](CONTRIBUTING.md)
+* [Code of Conduct](CODE_OF_CONDUCT.md)
+* [Security Policy](SECURITY.md)
+* [Third-Party Licenses](THIRD_PARTY_LICENSES.md)

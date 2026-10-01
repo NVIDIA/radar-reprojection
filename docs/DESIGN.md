@@ -10,7 +10,7 @@ The repository has three layers:
 
 1. **`algorithm/`** — the dataset-independent C++ reprojection library. It preprocesses logged static and actor detections, selects source views, and reprojects detections into the requested radar pose. Its method is described in [`algorithm/README.md`](../algorithm/README.md).
 2. **`proto/` and `server/`** — a thin gRPC translation layer. Protobuf messages mirror the algorithm structures; the server does not load datasets or know about clip identifiers.
-3. **`examples/python/`** — dataset adapters and the user-facing client. `PhysicalAIAVAdapter` converts a PhysicalAI-AV clip into `LogData`; `iter_reproject_requests` produces requests for each ego-pose/radar pair.
+3. **`examples/python/`** — dataset adapters and the user-facing client. `PhysicalAIAVAdapter` converts a PhysicalAI-AV clip into `LogData`; `iter_reproject_requests` produces one request per logged radar scan, with the ego pose interpolated to each scan timestamp.
 
 The normal data flow is:
 
@@ -49,7 +49,7 @@ The server and algorithm are dataset-independent. A dataset adapter implements
 
 The supplied PhysicalAI-AV mapping is documented in [SCHEMA.md](SCHEMA.md). For the extension workflow, see `SKILL.md` §8.
 
-Actor states are interpolated to each ego timestamp. Actors whose trajectories do not bracket that timestamp are omitted rather than extrapolated. Requests are emitted in ascending ego-timestamp order and then sorted radar-ID order.
+Requests follow the selected radars' logged scan timestamps, merged in ascending order (ties broken by radar ID). Ego and actor states are interpolated to each scan timestamp; scans outside the ego trajectory's time range are skipped, and actors whose trajectories do not bracket the timestamp are omitted rather than extrapolated.
 
 ## Bazel workspace
 

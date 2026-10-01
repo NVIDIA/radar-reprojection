@@ -1,7 +1,11 @@
 common --enable_bzlmod
 build  --cxxopt=-std=c++20 --host_cxxopt=-std=c++20
 build  --incompatible_strict_action_env
+# Optimized by default for every target (libs, binaries, tests). Note -c opt
+# defines NDEBUG, so plain assert() is compiled out. Override per invocation
+# with --config=debug or -c fastbuild/dbg (command line wins over this default).
+build  -c opt
 test   --test_output=errors
 
 build:debug   -c dbg --copt=-O0 --copt=-g
-build:release -c opt
+build:release -c opt   # redundant with the default; kept as an explicit alias
