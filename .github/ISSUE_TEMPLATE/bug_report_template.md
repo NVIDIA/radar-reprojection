@@ -1,9 +1,9 @@
 ---
 name: Bug report
-about: Report a reproducible problem
-title: "[BUG] "
+about: Create a bug report to help us improve NuRec
+title: "[BUG]"
 labels: bug
-assignees: ""
+assignees: 'daehyoungko'
 ---
 
 ## Description
@@ -29,10 +29,18 @@ Describe what happened, including sanitized logs where useful.
 ## Environment
 
 - Radar Reprojection commit or version:
+- Integration path (C++ library, gRPC server/client, or Python example):
 - Operating system and architecture:
+- CPU model and RAM:
 - Bazel/Bazelisk version:
 - Compiler version:
 - Python version, if applicable:
+
+## Input and Configuration
+
+Include the command or minimal code that reproduces the issue, relevant
+configuration, and selected radar IDs. For public sample data, include the
+dataset version and clip ID. Do not upload restricted datasets or private logs.
 
 ## Additional Context
 

@@ -2,6 +2,12 @@
 
 This repository contains the code, documentation, and evaluation results for an open-source radar reprojection library designed for autonomous driving simulation. As part of the **NVIDIA Physical AI** and **NuRec** ecosystems, this library provides a reference, data-driven approach to realistic radar signal simulation. It reprojects logged radar points to new 3D locations with velocity adjustments—maintaining fidelity even when the ego vehicle diverges during closed-loop testing.
 
+## Support
+
+* **Usage questions and discussion:** Ask about Radar Reprojection on the [NVIDIA Developer Forum (Omniverse / NuRec)](https://forums.developer.nvidia.com/c/omniverse/platform/nurec/752).
+* **Code-level bugs, documentation issues, and feature requests:** File a [GitHub issue](https://github.com/NVIDIA/radar-reprojection/issues/new/choose) using the Bug report, Documentation request, or Feature request template. The NVIDIA support responder is assigned automatically.
+* **Security vulnerabilities:** Use [NVIDIA's Vulnerability Disclosure Program](https://app.intigriti.com/programs/nvidia/nvidiavdp/detail). Do not report vulnerabilities in public issues.
+
 ## Key Features
 
 * **Data-Driven Simulation:** Generates realistic radar signals based on original sensor data.
