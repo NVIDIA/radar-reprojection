@@ -1,8 +1,16 @@
+# .github/ISSUE_TEMPLATE/config.yml — NuRec family
+# Place this file at .github/ISSUE_TEMPLATE/config.yml in the repo root.
+#
+# GitHub Issues is reserved for code-level bugs, documentation
+# requests, and feature requests. Usage questions route via the contact_link
+# below; security reporting is handled by the repo's SECURITY.md — GitHub adds
+# its own "Report a security vulnerability" link automatically, so we do NOT
+# ship one here (avoids a duplicate security entry in the chooser).
+
 blank_issues_enabled: false
 
 contact_links:
-  - name: Report a security vulnerability
-    url: https://www.nvidia.com/en-us/security/
-    about: >-
-      Report security issues privately through NVIDIA's Vulnerability
-      Disclosure Program.
+  - name: 💬 Submit a question (usage, how-to)
+    url: https://forums.developer.nvidia.com/c/omniverse/platform/nurec/752
+    about: >
+      For usage questions and discussion, please post on the NVIDIA Developer Forum (Omniverse / NuRec category). The support team monitors this category and answers there.

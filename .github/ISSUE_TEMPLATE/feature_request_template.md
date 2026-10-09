@@ -1,9 +1,9 @@
 ---
 name: Feature request
-about: Suggest an improvement
-title: "[FEATURE] "
+about: Suggest an idea for NuRec
+title: "[FEA]"
 labels: enhancement
-assignees: ""
+assignees: 'daehyoungko'
 ---
 
 Feature requests are welcome as feedback. This project is not accepting
