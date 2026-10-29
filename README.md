@@ -1,6 +1,6 @@
 # Radar Reprojection
 
-This repository contains the code, documentation, and evaluation results for an open-source radar reprojection library designed for autonomous driving simulation. As part of the **NVIDIA Physical AI** and **NuRec** ecosystems, this library provides a reference, data-driven approach to realistic radar signal simulation. It reprojects logged radar points to new 3D locations with velocity adjustments—maintaining fidelity even when the ego vehicle diverges during closed-loop testing.
+NVIDIA Radar Reprojection is a simulation capability that updates recorded radar returns and Doppler estimates for simulated vehicle poses, supporting closed-loop sensor-fusion evaluation. It separates static scene points from moving actors and transforms recorded measurements as vehicle and actor poses change. It reuses measured radar returns, with pose variation limited by the viewpoints captured in the recording.
 
 ## Support
 
